@@ -1,5 +1,64 @@
-# CarND-Controls-MPC
+# Model Predictive Control
+
 Self-Driving Car Engineer Nanodegree Program
+
+---
+
+## The Model
+
+The kinematic model uses the vehicle's x and y coordinates, velocity, and orientation angle. The mode then calculates the cross-track error (CTE) and the heading angle error. The model uses all 6 states variables (state vector) to track the vehicle state at time t and predict where the vehicle will be in the future state at time t+1. For simplicity, the model neglects all dynamical effects such as tire friction, inertia, and torque.
+
+The model uses the following update equations to calculate the vehicle state at time t+1.
+
+[//]: # (Image References)
+
+[image1]: ./update_equations.png "Update Equations.png"
+
+![alt text][image1]
+
+A control vector which includes all actuator values (acceleration (a) and steering angle (δ)) along with the state vector and update equations were used to successfully implement a MPC.
+
+## Timestep Length and Elapsed Duration
+
+The goal of Model Predictive Control is to optimize the control inputs: [δ,a]. An optimizer will tune these inputs until a low cost vector of control inputs is found. The length of this vector is determined by the timestep length (N). Thus N determines the number of variables optimized by the MPC. This is also the major driver of computational cost.
+
+MPC attempts to approximate a continuous reference trajectory by means of discrete paths between actuations. Larger values of elapsed duration (dt) result in less frequent actuations, which makes it harder to accurately approximate a continuous reference trajectory. 
+
+N and dt are usually hand tuned keeping in mind the effect of each parameter. I used the default values of N = 10 and dt = 0.1 since the control inputs were optimized successfully using those values.
+
+## Polynomial Fitting and MPC Preprocessing
+
+The waypoints which are provided by the Udacity simulator aren't in the same coordinates system as the vehicle so they are transformed to the vehicle's coordinates then a third degree polynomial is fitted to transformed waypoints. These polynomial coefficients are used to calculate the cte and epsi later on. They are used by the solver as well to create a reference trajectory.
+
+```c++
+// Transform waypoint coordinates to car coordinates
+for (unsigned int i = 0; i < ptsx.size(); i++)
+{
+   double shift_x = ptsx[i] - px;
+   double shift_y = ptsy[i] - py;
+   ptsx[i] = (shift_x * cos(0-psi) - shift_y * sin(0-psi));
+   ptsy[i] = (shift_x * sin(0-psi) + shift_y * cos(0-psi));
+}
+
+double* ptrx = &ptsx[0];
+double* ptry = &ptsy[0];
+Eigen::Map<Eigen::VectorXd> ptsx_transform(ptrx, 6);
+Eigen::Map<Eigen::VectorXd> ptsy_transform(ptry, 6);
+
+// Fit polynomial to the points
+auto coeffs = polyfit(ptsx_transform, ptsy_transform, 3);          
+```
+
+## Model Predictive Control with Latency
+
+In a real car, an actuation command won't execute instantly - there will be a delay as the command propagates through the system. The simulator has a 100 ms latency that the model had to account for. To handle this latency, the state values are calculated using the model and the delay interval.
+
+```c++
+px += v * cos(psi) * latency;
+py += v * sin(psi) * latency;
+psi -= v * steer_value / Lf * latency;
+v += throttle_value * latency;
+```
 
 ---
 
